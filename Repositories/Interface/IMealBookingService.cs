@@ -10,5 +10,7 @@ namespace BookMyMeal.Repositories.Interface
         List<MealBookingResponse> BookMyMeal(MealBookingRequest mealBookingRequest);   // Book meals for a specific employee
 
         List<MealBookingResponse> CancelBookMyMeal(long mealBookingDetailsId);   // Cancel a meal booking for an employee
+
+        bool ReedemCoupon(long mealBookingId);
     }
 }

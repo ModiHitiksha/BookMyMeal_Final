@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using QRCoder;
 using System.Drawing;
 using System.Drawing.Imaging;
-using static QRCoder.PayloadGenerator;
 
 namespace BookMyMeal.Repositories.Implementation
 {
@@ -54,6 +53,9 @@ namespace BookMyMeal.Repositories.Implementation
                             x.BookingDate.ToString("MM/dd/yyyy") == strFinalSDate && 
                             x.MealType.ToLower() == mealBookingRequest.MealType.ToLower()))
                             {
+
+
+
                                 throw new Exception($"Meal is already booked on " + strFinalSDate);                                
                             }
                             else
@@ -69,24 +71,21 @@ namespace BookMyMeal.Repositories.Implementation
 
                     if(isNewRecord)
                     {
-                        this._bookedMyMealDbContext.Database.ExecuteSqlRaw($"EXEC Booked_My_Meal @empId = {mealBookingRequest.EmployeeLoginID}, @mealType = '{mealBookingRequest.MealType}', @bookingDate= {finalSDate}, @createdBy = {mealBookingRequest.EmployeeLoginID}");
+                        string strSproc = $"EXEC Booked_My_Meal @empId = {mealBookingRequest.EmployeeLoginID}, @mealType = '{mealBookingRequest.MealType}', @bookingDate= '{finalSDate.ToString("MM/dd/yyyy")}', @createdBy = {mealBookingRequest.EmployeeLoginID}";
+                        this._bookedMyMealDbContext.Database.ExecuteSqlRaw(strSproc);
 
-                        //QRCodeGenerator QrGenerator = new QRCodeGenerator();
-                        //QRCodeData QrCodeInfo = QrGenerator.CreateQrCode(qRCode.QRCodeText, QRCodeGenerator.ECCLevel.Q);
-                        //QRCode QrCode = new QRCode(QrCodeInfo);
-                        //Bitmap QrBitmap = QrCode.GetGraphic(60);
-                        //byte[] BitmapArray = QrBitmap.BitmapToByteArray();
-                        //string QrUri = string.Format("data:image/png;base64,{0}", Convert.ToBase64String(BitmapArray));
-                        //this._bookedMyMealDbContext.Database.ExecuteSqlRaw($"EXEC Create_Coupon_For_BookMyMeal @mealBookingId={ },@qrCodeUri={QrUri}");
+                        long mealBookingId = this._bookedMyMealDbContext.Bookmymeals
+                            .Where(x => x.EmployeeLoginId == mealBookingRequest.EmployeeLoginID).OrderByDescending(x=>x.MealBookingId).First().MealBookingId;
 
-                        //QRCodeGenerator qrGenerator = new QRCodeGenerator();
-                        //QRCodeData qrCodeData = qrGenerator.CreateQrCode(mealBookingRequest);
-                        //QRCode qrCode = new QRCode(qrCodeData);
-                        //var qrCodeAsBitmap = qrCode.GetGraphic(20);                       
-                        //string base64String = Convert.ToBase64String(BitmapToByteArray(qrCodeAsBitmap));
-                        //string QRImageURL = "data:image/png;base64," + base64String;
+                        QRCodeGenerator QrGenerator = new QRCodeGenerator();
+                        QRCodeData QrCodeInfo = QrGenerator.CreateQrCode(string.Concat(mealBookingId, "-", mealBookingRequest.EmployeeLoginID,"-", finalSDate, "-", mealBookingRequest.MealType), QRCodeGenerator.ECCLevel.Q);
+                        QRCode QrCode = new QRCode(QrCodeInfo);
+                        Bitmap QrBitmap = QrCode.GetGraphic(60);
+                        byte[] BitmapArray = QrBitmap.BitmapToByteArray();
+                        string QrUri = string.Format("data:image/png;base64,{0}", Convert.ToBase64String(BitmapArray));
+                        this._bookedMyMealDbContext.Database.ExecuteSqlRaw($"EXEC Create_Coupon_For_BookMyMeal @mealBookingId={mealBookingId},@qrCodeUri='{QrUri}'");
                     }
-                    sDate.AddDays(1);
+                    sDate = sDate.AddDays(1);
                 }
 
                 return this.GetMealBookingDetailsByEmployeeId(mealBookingRequest.EmployeeLoginID);
@@ -156,8 +155,41 @@ namespace BookMyMeal.Repositories.Implementation
             }
         }
 
-        //Extension method to convert Bitmap to Byte Array
-        private byte[] BitmapToByteArray(Bitmap bitmap)
+        public bool ReedemCoupon(long mealBookingId)
+        {
+            try
+            {
+                var mealBookingDetails = this._bookedMyMealDbContext.Bookmymeals.Where(x => x.MealBookingId == mealBookingId && x.IsBooked == true).FirstOrDefault();
+
+                if(mealBookingDetails != null)
+                {
+                    mealBookingDetails.UpdatedOn = DateTime.Now;                    
+
+                    var mealCoupons = this._bookedMyMealDbContext.Coupons.Where(x => x.MealBookingId == mealBookingDetails.MealBookingId).FirstOrDefault();
+                    if (mealCoupons != null)
+                    {
+                        mealCoupons.IsRedeem = true;
+                        mealCoupons.UpdateOn = DateTime.Now;
+
+                        this._bookedMyMealDbContext.Coupons.Update(mealCoupons);
+                        this._bookedMyMealDbContext.Bookmymeals.Update(mealBookingDetails);
+                        this._bookedMyMealDbContext.SaveChanges();
+                        return true;
+                    }
+                }
+                return false;
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+    }
+
+    //Extension method to convert Bitmap to Byte Array
+    public static class BitmapExtension
+    {
+        public static byte[] BitmapToByteArray(this Bitmap bitmap)
         {
             using (MemoryStream ms = new MemoryStream())
             {

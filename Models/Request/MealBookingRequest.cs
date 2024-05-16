@@ -17,8 +17,5 @@ namespace BookMyMeal.Models.Request
         [Required]
         [DataType(DataType.DateTime)]
         public DateTime EndDate { get; set; }
-
-        [Required]
-        public string Status { get; set; }
     }
 }
